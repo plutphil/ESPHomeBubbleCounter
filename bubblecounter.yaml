@@ -29,7 +29,7 @@ logger:
 
 api:
   encryption:
-    key: "GDONOZ283vjkGHHL6uxIchzeoOqQUEpSc+YqioAzDYg="
+    key: ""
 
 ota:
   - platform: esphome
@@ -40,7 +40,7 @@ wifi:
   password: !secret wifi_password
   ap:
     ssid: BubbleCounter Fallback Hotspot
-    password: "HNMFdAhwyQDG"
+    password: ""
 
 captive_portal:
 
