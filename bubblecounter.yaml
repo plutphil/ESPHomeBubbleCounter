@@ -1,0 +1,141 @@
+# Board: Generic ESP32 Board (Generic)
+# Definition: definitions/boards/generic-esp32/manifest.yaml
+
+esphome:
+  name: bubblecounter
+  friendly_name: BubbleCounter
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: github://robertklep/esphome-custom-component
+    components: [ custom, custom_component ]
+  - source:
+      type: local
+      path: my_components
+
+interrupt:
+  id: my_interrupt
+  pin:
+    number: GPIO35
+    mode:
+      input: true
+
+    
+logger:
+
+api:
+  encryption:
+    key: "GDONOZ283vjkGHHL6uxIchzeoOqQUEpSc+YqioAzDYg="
+
+ota:
+  - platform: esphome
+
+wifi:
+  id: wifi_component
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: BubbleCounter Fallback Hotspot
+    password: "HNMFdAhwyQDG"
+
+captive_portal:
+
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 10
+
+  - file: "gfonts://Roboto"
+    id: font_large
+    size: 28
+
+globals:
+  - id: bubble_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: last_pulse_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: bubble_rate
+    type: float
+    restore_value: false
+    initial_value: "0"
+
+binary_sensor:
+  - platform: gpio
+    name: "Gas meter pulses"
+    id: gas_sensor_floater
+    internal: true
+    pin:
+      number: GPIO25
+      mode: INPUT
+    on_press:
+      - lambda: |-
+          uint32_t now = millis();
+          uint32_t dt = now - id(last_pulse_ms);
+          if (id(last_pulse_ms) != 0 && dt < 30) return;
+          
+          float a = 60000.f/(now - id(last_pulse_ms));
+          id(last_pulse_ms) = now;
+          id(bubble_count)++;
+          ESP_LOGD("Counter", "Impulsi: %d", id(bubble_count));
+          float b = id(bubble_rate);
+          
+          id(bubble_rate) = a*0.3f+b*0.7f;
+          id(bubbles_per_minute).publish_state(id(bubble_rate));
+
+sensor:
+  - platform: template
+    name: "Bubble Counter"
+    unit_of_measurement: "bubbles"
+    id: bubbles
+    accuracy_decimals: 0
+    icon: mdi:counter
+    lambda: |-
+      return id(my_interrupt).cnt;
+    update_interval: 10s
+  
+  - platform: template
+    name: "Bubbles per Minute"
+    id: bubbles_per_minute
+    icon: mdi:speedometer
+    unit_of_measurement: "bubbles/min"
+    accuracy_decimals: 2
+    state_class: measurement
+    lambda: |-
+      return id(my_interrupt).rate;
+    update_interval: 10s
+
+display:
+  - platform: ssd1306_i2c 
+    id: oled_display 
+    model: "SSD1306 128x64" 
+    address: 0x3C 
+    lambda: |- 
+      it.printf(0, 0, id(font_small), "BUBBLE COUNTER"); 
+      it.printf(0, 16, id(font_large), "%lu", (unsigned long) id(my_interrupt).cnt); 
+      it.printf(0, 48, id(font_small), "CPM: %.1f", id(bubble_rate)); 
+      
+      it.printf(72, 32, id(font_small), "%d",id(wifi_component).wifi_rssi()); 
+      if (id(wifi_component).is_connected()) { 
+        it.print(72, 48, id(font_small), "WiFi"); 
+      } else { 
+        it.print(72, 48, id(font_small), "No WiFi");
+      } 
+
+interval: 
+  - interval: 250ms 
+    then: 
+      - component.update: oled_display
